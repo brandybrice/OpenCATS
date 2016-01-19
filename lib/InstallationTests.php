@@ -220,7 +220,7 @@ class InstallationTests
     /* Is MySQL extension loaded?. */
     public static function checkMySQLExtension()
     {
-        if (!self::DEBUG_FAIL && extension_loaded('mysql') && function_exists('mysql_connect'))
+        if (!self::DEBUG_FAIL && extension_loaded('mysql') && function_exists('mysqli_connect'))
         {
             echo '<tr class="pass"><td>PHP MySQL extension (mysql) is loaded.</td></tr>';
             return true;
@@ -362,13 +362,9 @@ class InstallationTests
     public static function checkMySQL($host, $user, $pass, $name)
     {
         /* Check MySQL connection. */
-        if (self::DEBUG_FAIL || !@mysql_connect($host, $user, $pass))
+        if (self::DEBUG_FAIL || !dbConnect($host, $user, $pass))
         {
-            echo sprintf(
-                '<tr class="fail"><td>Cannot connect to database.<pre class="fail">%s</pre></td></tr>',
-                mysql_error()
-            );
-            return false;
+           return false;
         }
 
         echo '<tr class="pass"><td>MySQL connection was successful.</td></tr>';
@@ -380,12 +376,12 @@ class InstallationTests
         }
 
         /* Try to switch to the CATS database. */
-        if (!@mysql_select_db($name))
+        if (!@mysqli_select_db($dbInstance, $name))
         {
             echo sprintf(
                 '<tr class="fail"><td>Failed to select database \'%s\'.<pre class="fail">%s</pre></td></tr>',
                 $name,
-                mysql_error()
+                mysqli_error($dbInstance)
             );
             return false;
         }
@@ -396,11 +392,11 @@ class InstallationTests
         );
 
         /* Check CREATE TABLE permissions. */
-        $queryResult = @mysql_query('CREATE TABLE `testtable` (`id` int(11) NOT NULL default \'0\') ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;');
+        $queryResult = @mysqli_query($dbInstance, 'CREATE TABLE `testtable` (`id` int(11) NOT NULL default \'0\') ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;');
         if (!$queryResult)
         {
             mysql_query('DROP TABLE testtable');
-            $queryResult = @mysql_query('CREATE TABLE `testtable` (`id` int(11) NOT NULL default \'0\') ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;');
+            $queryResult = @mysqli_query($dbInstance, 'CREATE TABLE `testtable` (`id` int(11) NOT NULL default \'0\') ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;');
         }
         if (!$queryResult)
         {
@@ -419,7 +415,7 @@ class InstallationTests
         );
 
         /* Check INSERT permissions. */
-        if (!@mysql_query('INSERT INTO testtable (id) VALUES (1)'))
+        if (!@mysql_iquery($dbInstance, 'INSERT INTO testtable (id) VALUES (1)'))
         {
             echo sprintf(
                 '<tr class="fail"><td>Cannot insert into \'testtable\' table. Please verify that '
@@ -434,7 +430,7 @@ class InstallationTests
         echo '<tr class="pass"><td>Can insert into \'testtable\' table.</td></tr>';
 
         /* Check UPDATE permissions. */
-        if (!@mysql_query('UPDATE testtable SET id = 5 WHERE id = 1'))
+        if (!@mysqli_query($dbInstance, 'UPDATE testtable SET id = 5 WHERE id = 1'))
         {
             echo sprintf(
                 '<tr class="fail"><td>Cannot update \'testtable\' table. Please verify that '
@@ -449,7 +445,7 @@ class InstallationTests
         echo '<tr class="pass"><td>Can update \'testtable\' table.</td></tr>';
 
         /* Check DELETE permissions. */
-        if (!@mysql_query('DELETE FROM testtable WHERE id = 5'))
+        if (!@mysqli_query($dbInstance, 'DELETE FROM testtable WHERE id = 5'))
         {
             echo sprintf(
                 '<tr class="fail"><td>Cannot delete from \'testtable\' table. Please verify that '
@@ -464,7 +460,7 @@ class InstallationTests
         echo '<tr class="pass"><td>Can delete from \'testtable\' table.</td></tr>';
 
         /* Check DROP TABLES permissions. */
-        if (!@mysql_query('DROP TABLE testtable'))
+        if (!@mysqli_query($dbInstance, 'DROP TABLE testtable'))
         {
             echo sprintf(
                 '<tr class="fail"><td>Cannot drop table \'testtable\'. Please verify that '
@@ -736,7 +732,7 @@ class InstallationTests
     private static function _checkMySQLVersion()
     {
         /* Check MySQL version. */
-        $queryResult = mysql_query('SELECT VERSION()');
+        $queryResult = mysqli_query($dbInstance, 'SELECT VERSION()');
         if (!$queryResult)
         {
             echo sprintf(
@@ -746,7 +742,7 @@ class InstallationTests
             return false;
         }
 
-        $row = mysql_fetch_row($queryResult);
+        $row = mysqli_fetch_row($queryResult);
         $versionParts = explode('-', $row[0]);
         $version = $versionParts[0];
 
@@ -872,6 +868,21 @@ class InstallationTests
 
         return $proceed;
     }
-}
 
+/*
+ * For PHP 7 compatibility we need to replace the old mysql_*() functions with mysqli_*() equivalents. This requires
+ * a database connection instance to be recorded. This function returns that instance, creating a new connection if
+ * one does not already exist.
+ */
+public function dbConnect($host, $user, $pass)
+    static global $dbInstance = 0;
+    
+    if (!$dbInstance) {
+            $dbInstance = mysqli_connect($host, $user, $pass);
+            if (!$dbInstance) {
+                echo sprintf('<tr class="fail"><td>mysql connection failed: ' . mysqli_connect_error() . '</td></tr>');
+            }
+        return $dbInstance;
+    }
+}
 ?>
